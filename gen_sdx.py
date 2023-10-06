@@ -4,10 +4,11 @@ from abc import ABC, abstractmethod
 import math, os, argparse, datetime, time, logging, json, logging, coloredlogs
 from compel import Compel, ReturnedEmbeddingsType
 from diffusers import  DiffusionPipeline , loaders, DPMSolverMultistepScheduler
+from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput 
 from diffusers.utils.pil_utils import make_image_grid
 import torch
 import accelerate
-
+import python_coreml_stable_diffusion.pipeline as coreml_pipeline
 def init_logger(name):
     # coloredlogs.install("DEBUG")
     logger = logging.getLogger(name)
@@ -53,6 +54,7 @@ class PipeClass:
         self.pipe = DiffusionPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0",
             torch_dtype=torch.float32,
+            # custom_pipeline="~/ml-stable-diffusion/python_coreml_stable_diffusion/",
             variant="fp16",
             safety_checker=None,
             use_safetensors=True,
